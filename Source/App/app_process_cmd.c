@@ -35,6 +35,8 @@
 #include <sys/mman.h>
 #endif
 
+#define MB_CONVERSION_FACTOR 1048576.0
+
 #include "app_output_ivf.h"
 
 /***************************************
@@ -950,22 +952,30 @@ void process_output_stream_buffer(EncChannel *channel, EncApp *enc_app, int32_t 
             const double frame_rate = (double)app_cfg->config.frame_rate_numerator /
                 (double)app_cfg->config.frame_rate_denominator;
 
-            // Patman's progress variables
-            const double ete        = app_cfg->performance_context.total_encode_time;
-            int ete_r               = round(ete);
-            int ete_hours           = ete_r / 3600;
-            int ete_minutes         = (ete_r - (ete_hours * 3600)) / 60;
-            int ete_seconds         = ete_r - (ete_hours * 3600) - (ete_minutes * 60);
-            const double eta        = (app_cfg->performance_context.total_encode_time / app_cfg->frames_encoded) * (app_cfg->frames_to_be_encoded - app_cfg->frames_encoded);
-            int eta_r               = round(eta);
-            int eta_hours           = eta_r / 3600;
-            int eta_minutes         = (eta_r - (eta_hours * 3600)) / 60;
-            int eta_seconds         = eta_r - (eta_hours * 3600) - (eta_minutes * 60);
-            double size             = ((double)app_cfg->performance_context.byte_count / 1000000);
-            double estsz            = ((double)app_cfg->performance_context.byte_count * app_cfg->frames_to_be_encoded / (app_cfg->frames_encoded * 1000) / 1000);
+            // Igor/Patman's progress variables
+            const double frame_rate_factor = 1.0 / frame_rate;
+            const int ete           = (int)app_cfg->performance_context.total_encode_time;
+            int ete_hours           = ete / 3600;
+            int ete_minutes         = (ete - ete_hours * 3600) / 60;
+            int ete_seconds         = ete - ete_hours * 3600 - ete_minutes * 60;
+            const int eta           = (int)((app_cfg->frames_to_be_encoded - *frame_count) / fps);
+            int eta_hours           = eta / 3600;
+            int eta_minutes         = (eta - eta_hours * 3600) / 60;
+            int eta_seconds         = eta - eta_hours * 3600 - eta_minutes * 60;
+            const double size       = (double)app_cfg->performance_context.byte_count / MB_CONVERSION_FACTOR;
+            const double estsz      = size / *frame_count * app_cfg->frames_to_be_encoded;
+            const int current_pos   = (int)(*frame_count * frame_rate_factor);
+            int pos_hours           = current_pos / 3600;
+            int pos_minutes         = (current_pos - pos_hours * 3600) / 60;
+            int pos_seconds         = current_pos - pos_hours * 3600 - pos_minutes * 60;
+            const int duration      = (int)(app_cfg->frames_to_be_encoded / frame_rate);
+            int dur_hours           = duration / 3600;
+            int dur_minutes         = (duration - dur_hours * 3600) / 60;
+            int dur_seconds         =  duration - dur_hours * 3600 - dur_minutes * 60;
+            const double pos_percent= (double)(*frame_count * 100) / app_cfg->frames_to_be_encoded;
+            const double speed      = fps * frame_rate_factor;
 
             switch (app_cfg->progress) {
-            case 0: break;
             case 1:
                 if (!(flags & EB_BUFFERFLAG_IS_ALT_REF))
                     fprintf(stderr, "\b\b\b\b\b\b\b\b\b%9d", *frame_count);
@@ -981,8 +991,20 @@ void process_output_stream_buffer(EncChannel *channel, EncApp *enc_app, int32_t 
                 break;
             case 3:
                 if ((int)app_cfg->frames_to_be_encoded == -1) {
+#if defined(_WIN64) || defined(_MSC_VER) || defined(_WIN32)
                     fprintf(stderr,
-                            "\rEncoding: \x1b[33m%4d Frames\x1b[0m @ \x1b[32m%.2f\x1b[0m fp%c | \x1b[35m%.2f kb/s\x1b[0m | Time: \x1b[36m%d:%02d:%02d\x1b[0m | Size: \x1b[31m%.2f MB\x1b[0m",
+                            "\rEncoding: %4d Frames @ %.2f fp%c | %.2f kb/s | Time: %d:%02d:%02d | Size: %.2f MiB",
+                            *frame_count,
+                            // (int)app_cfg->frames_to_be_encoded,
+                            fps >= 1.0 ? fps : fps * 60,
+                            fps >= 1.0 ? 's' : 'm',
+                            ((double)(app_cfg->performance_context.byte_count << 3) * frame_rate /
+                                (app_cfg->frames_encoded * 1000)),
+                            ete_hours, ete_minutes, ete_seconds,
+                            size);
+#else
+                    fprintf(stderr,
+                            "\rEncoding: \x1b[33m%4d Frames\x1b[0m @ \x1b[32m%.2f\x1b[0m fp%c | \x1b[35m%.2f kb/s\x1b[0m | Time: \x1b[36m%d:%02d:%02d\x1b[0m | Size: \x1b[31m%.2f MiB\x1b[0m",
                             *frame_count,
                             // (int)app_cfg->frames_to_be_encoded,
                             fps >= 1.0 ? fps : fps * 60,
@@ -990,9 +1012,107 @@ void process_output_stream_buffer(EncChannel *channel, EncApp *enc_app, int32_t 
                             ((double)(app_cfg->performance_context.byte_count << 3) * frame_rate /
                                 (app_cfg->frames_encoded * 1000)),
                             ete_hours, ete_minutes, ete_seconds, size);
+#endif
                 } else {
+#if defined(_WIN64) || defined(_MSC_VER) || defined(_WIN32)
+
+                    /*char duration_str[20];
+                    int length = 0;
+                    if (dur_hours > 0) {
+                        length = sprintf(duration_str, "%d:", dur_hours);
+                        if (dur_hours < 10)
+                            length = sprintf(duration_str, "%d:", dur_hours);
+                        else
+                            length = sprintf(duration_str, "%d:", dur_hours); /
+                    }
+                    sprintf(duration_str + length, "%02d:%02d", dur_minutes, dur_seconds);
+
+                    char position_str[20];
+                    if (length > 0)
+                        length = sprintf(position_str, "%0*d:", length - 1,  pos_hours);
+                    sprintf(position_str + length, "%02d:%02d", pos_minutes, pos_seconds);
+
+                    char ete_hours_str[10];
+                    if (ete_hours < 100)
+                        sprintf(ete_hours_str, "%02d", ete_hours);
+                    else
+                        sprintf(ete_hours_str, "%d", ete_hours);
+                    char eta_hours_str[10];
+                    if (eta_hours < 10)
+                        sprintf(eta_hours_str, "%02d", eta_hours);
+                    else
+                        sprintf(eta_hours_str, "%d", eta_hours); */
+
+                    int frame_count_max_digits = 2;
+                    int buffer = (int)app_cfg->frames_to_be_encoded / 100;
+                    while(buffer) {
+                        buffer /= 10;
+                        ++frame_count_max_digits;
+                    }
+
+                    int bitrate = (int)((app_cfg->performance_context.byte_count << 3) * frame_rate /
+                                    (*frame_count * 1000));
+                    int bitrate_max_digits = 4;
+                    buffer = bitrate / 10000;
+                    while(buffer) {
+                        buffer /= 10;
+                        ++bitrate_max_digits;
+                    }
+
+                    int fps_max_digits = 5;
+                    buffer = (int)fps / 100;
+                    while(buffer) {
+                        buffer /= 10;
+                        ++fps_max_digits;
+                    }
+
+                    char size_str[10];
+                    if (size / 10 < 1)
+                        sprintf(size_str, "%4.2f", size);
+                    else if (size / 100 < 1)
+                        sprintf(size_str, "%4.1f", size);
+                    else if (size / 1000 < 1)
+                        sprintf(size_str, "%4d", (int)size);
+                    else
+                        sprintf(size_str, "%d", (int)size);
+
+                    char estsz_str[10];
+                    if (estsz / 10 < 1)
+                        sprintf(estsz_str, "%4.2f", estsz);
+                    else if (estsz / 100 < 1)
+                        sprintf(estsz_str, "%4.1f", estsz);
+                    else if (estsz / 1000 < 1)
+                        sprintf(estsz_str, "%4d", (int)estsz);
+                    else
+                        sprintf(estsz_str, "%d", (int)estsz);
+                    /* int size_max_digits = 4;
+                    buffer = (int)size / 100;
+                    while(buffer) {
+                        buffer /= 100;
+                        size_max_digits += 2;
+                    } */
+
                     fprintf(stderr,
-                            "\rEncoding: \x1b[33m%4d/%d Frames\x1b[0m @ \x1b[32m%.2f\x1b[0m fp%c | \x1b[35m%.2f kb/s\x1b[0m | Time: \x1b[36m%d:%02d:%02d\x1b[0m \x1b[38;5;248m[-%d:%02d:%02d]\x1b[0m | Size: \x1b[31m%.2f MB\x1b[0m \x1b[38;5;248m[%.2f MB]\x1b[0m",
+                            "\r\[%4.1f%%] \x1b[33m%*d/%d Frames\x1b[0m @ \x1b[32m%*.2f\x1b[0m fp%c \x1b[35m%.2fx\x1b[0m | \x1b[32m%*d kb/s\x1b[0m | \x1b[34m%d:%02d:%02d/%d:%02d:%02d\x1b[0m | %d:%02d:%02d [\x1b[36m-%d:%02d:%02d\x1b[0m] %s MB [\x1b[31m%s MB\x1b[0m] ",
+                            pos_percent,
+                            frame_count_max_digits, *frame_count,
+                            (int)app_cfg->frames_to_be_encoded,
+                            // pos_hours, pos_minutes, pos_seconds, dur_hours, dur_minutes, dur_seconds,
+                            fps_max_digits,
+                            fps >= 1.0 ? fps : fps * 60,
+                            fps >= 1.0 ? 's' : 'm',
+                            speed,
+                            bitrate_max_digits, bitrate,
+                            pos_hours, pos_minutes, pos_seconds,
+                            dur_hours, dur_minutes, dur_seconds,
+                            ete_hours, ete_minutes, ete_seconds,
+                            eta_hours, eta_minutes, eta_seconds,
+                            // size_max_digits, size,
+                            size_str,
+                            estsz_str);
+#else
+                    fprintf(stderr,
+                            "\rEncoding: \x1b[33m%4d/%d Frames\x1b[0m @ \x1b[32m%.2f\x1b[0m fp%c | \x1b[35m%.2f kb/s\x1b[0m | Time: \x1b[36m%d:%02d:%02d\x1b[0m \x1b[38;5;248m[-%d:%02d:%02d]\x1b[0m | Size: \x1b[31m%.2f MiB\x1b[0m \x1b[38;5;248m[%.2f MiB]\x1b[0m",
                             *frame_count,
                             (int)app_cfg->frames_to_be_encoded,
                             fps >= 1.0 ? fps : fps * 60,
@@ -1000,6 +1120,7 @@ void process_output_stream_buffer(EncChannel *channel, EncApp *enc_app, int32_t 
                             ((double)(app_cfg->performance_context.byte_count << 3) * frame_rate /
                                 (app_cfg->frames_encoded * 1000)),
                             ete_hours, ete_minutes, ete_seconds, eta_hours, eta_minutes, eta_seconds, size, estsz);
+#endif
                 }
                 break;
             default: break;
@@ -1080,21 +1201,6 @@ void process_output_stream_buffer(EncChannel *channel, EncApp *enc_app, int32_t 
             const double fps        = (double)*frame_count / app_cfg->performance_context.total_encode_time;
             const double frame_rate = (double)app_cfg->config.frame_rate_numerator /
                 (double)app_cfg->config.frame_rate_denominator;
-
-            // Patman's progress variables
-            const double ete        = app_cfg->performance_context.total_encode_time;
-            int ete_r               = round(ete);
-            int ete_hours           = ete_r / 3600;
-            int ete_minutes         = (ete_r - (ete_hours * 3600)) / 60;
-            int ete_seconds         = ete_r - (ete_hours * 3600) - (ete_minutes * 60);
-            const double eta        = (app_cfg->performance_context.total_encode_time / app_cfg->frames_encoded) * (app_cfg->frames_to_be_encoded - app_cfg->frames_encoded);
-            int eta_r               = round(eta);
-            int eta_hours           = eta_r / 3600;
-            int eta_minutes         = (eta_r - (eta_hours * 3600)) / 60;
-            int eta_seconds         = eta_r - (eta_hours * 3600) - (eta_minutes * 60);
-            double size             = ((double)app_cfg->performance_context.byte_count / 1000000);
-            double estsz            = ((double)app_cfg->performance_context.byte_count * app_cfg->frames_to_be_encoded / (app_cfg->frames_encoded * 1000) / 1000);
-
             switch (app_cfg->progress) {
             case 0: break;
             case 1:
@@ -1109,30 +1215,6 @@ void process_output_stream_buffer(EncChannel *channel, EncApp *enc_app, int32_t 
                          (app_cfg->frames_encoded * 1000)),
                         fps >= 1.0 ? fps : fps * 60,
                         fps >= 1.0 ? 's' : 'm');
-                break;
-            case 3:
-                if ((int)app_cfg->frames_to_be_encoded == -1) {
-                    fprintf(stderr,
-                            "\rEncoding: \x1b[33m%4d Frames\x1b[0m @ \x1b[32m%.2f\x1b[0m fp%c | \x1b[35m%.2f kb/s\x1b[0m | Time: \x1b[36m%d:%02d:%02d\x1b[0m | Size: \x1b[31m%.2f MB\x1b[0m",
-                            *frame_count,
-                            // (int)app_cfg->frames_to_be_encoded,
-                            fps >= 1.0 ? fps : fps * 60,
-                            fps >= 1.0 ? 's' : 'm',
-                            ((double)(app_cfg->performance_context.byte_count << 3) * frame_rate /
-                             (app_cfg->frames_encoded * 1000)),
-                            ete_hours, ete_minutes, ete_seconds, size);
-                } else {
-                    fprintf(stderr,
-                            "\rEncoding: \x1b[33m%4d/%d Frames\x1b[0m @ \x1b[32m%.2f\x1b[0m fp%c | \x1b[35m%.2f kb/s\x1b[0m | Time: \x1b[36m%d:%02d:%02d\x1b[0m \x1b[38;5;248m[-%d:%02d:%02d]\x1b[0m | Size: \x1b[31m%.2f MB\x1b[0m \x1b[38;5;248m[%.2f MB]\x1b[0m",
-                            *frame_count,
-                            (int)app_cfg->frames_to_be_encoded,
-                            fps >= 1.0 ? fps : fps * 60,
-                            fps >= 1.0 ? 's' : 'm',
-                            ((double)(app_cfg->performance_context.byte_count << 3) * frame_rate /
-                             (app_cfg->frames_encoded * 1000)),
-                            ete_hours, ete_minutes, ete_seconds, eta_hours, eta_minutes, eta_seconds, size, estsz);
-                }
-                break;
             default: break;
             }
             fflush(stderr);

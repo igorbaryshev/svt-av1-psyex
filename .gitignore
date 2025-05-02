@@ -30,3 +30,8 @@ third_party/aom/lib/*/*/aom.lib
 third_party/cpuinfo
 third_party/safestringlib/dummy.c
 /offline_ci/
+svt_build
+profile_data
+Source/dovi
+Source/hdr
+Source/mimalloc
