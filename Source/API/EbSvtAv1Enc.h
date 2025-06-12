@@ -579,21 +579,32 @@ typedef struct EbSvtAv1EncConfiguration {
      */
     uint8_t enable_dlf_flag;
 
-    /* Film grain denoising the input picture
-    * Flag to enable the denoising
-    *
-    * Default is 0. */
+    /**
+     * @brief Strength of film grain and denoising.
+     * 0: film grain and denoising off (default in SVT-AV1-PSY)
+     * >0: film grain enabled, value determines strength.
+     *
+     * Default is 0. */
     uint32_t film_grain_denoise_strength;
 
     /**
-    * @brief Determines how much denoising is used.
-    * Only applicable when film grain is ON.
-    *
-    * 0 is no denoising (default in SVT-AV1-PSY)
-    * 1 is full denoising
-    *
-    * Default is 0. */
+     * @brief Flag to enable denoising.
+     * Only applicable when film grain is ON.
+     * 0: denoising off (default)
+     * 1: denoising on
+     *
+     * Default is 0. */
     uint8_t film_grain_denoise_apply;
+
+    /**
+     * @brief Film grain estimation interval.
+     * 
+     *  0: Estimate only for first frame, reuse for all others.
+     *  1: Estimate every frame.
+     *  2-50: Estimate every N-th frame.
+     * 
+     * Default is 1. */
+    uint32_t film_grain_estimation_interval;
 
     /* CDEF Level
     *

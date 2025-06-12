@@ -44,6 +44,15 @@ typedef struct List0OnlyBase {
     uint16_t list0_only_base_th;
 } List0OnlyBase;
 
+// Film grain parameter ring buffer for multi-threaded estimation reuse
+#define FG_PARAM_RING_SIZE 64
+
+typedef struct {
+    AomFilmGrain params;
+    volatile int ready;
+    uint64_t frame_number;
+} FilmGrainParamSlot;
+
 /************************************
      * Sequence Control Set
      ************************************/
@@ -110,6 +119,8 @@ typedef struct SequenceControlSet {
     uint8_t enable_dg;
     /*!< Film grain seed */
     uint16_t film_grain_random_seed;
+    /*!< Film grain ring buffer */
+    FilmGrainParamSlot fg_param_ring[FG_PARAM_RING_SIZE];
     /*!< over_boundary_block: pad resolution to a multiple of SB for smaller overhead
         (The signal changes per preset; 0: No over boundary blk allowed, 1: over boundary blk allowed) Default is 1.
         to enable when md_skip_blk is on */

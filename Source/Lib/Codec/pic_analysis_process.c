@@ -19,6 +19,7 @@
 #include "pcs.h"
 #include "sequence_control_set.h"
 #include "pic_buffer_desc.h"
+#include "svt_time.h"
 
 #include "resource_coordination_results.h"
 #include "pic_analysis_process.h"
@@ -1452,9 +1453,44 @@ void svt_aom_picture_pre_processing_operations(PictureParentControlSet *pcs, Seq
     if (scs->static_config.fgs_table) {
         apply_film_grain_table(scs, pcs);
     } else if (scs->static_config.film_grain_denoise_strength) {
-        denoise_estimate_film_grain(scs, pcs);
-    }
+        uint32_t interval = scs->static_config.film_grain_estimation_interval;
+        uint64_t pic_num = pcs->picture_number;
 
+        if (interval == 1) {
+            denoise_estimate_film_grain(scs, pcs);
+        } else if (interval == 0) {
+            if (pic_num == 0) {
+                denoise_estimate_film_grain(scs, pcs);
+                scs->fg_param_ring[0].params = pcs->frm_hdr.film_grain_params;
+                scs->fg_param_ring[0].frame_number = 0;
+                scs->fg_param_ring[0].ready = 1;
+            } else {
+                // Wait for frame 0's params to be ready
+                while (!scs->fg_param_ring[0].ready) svt_av1_sleep(1);
+                uint16_t saved_seed = pcs->frm_hdr.film_grain_params.random_seed;
+                pcs->frm_hdr.film_grain_params = scs->fg_param_ring[0].params;
+                pcs->frm_hdr.film_grain_params.random_seed = saved_seed;
+            }
+        } else {
+            bool do_estimate = (pic_num % interval == 0);
+            uint64_t prev = (pic_num / interval) * interval;
+            uint32_t slot = (prev / interval) % FG_PARAM_RING_SIZE;
+            if (do_estimate) {
+                denoise_estimate_film_grain(scs, pcs);
+                scs->fg_param_ring[slot].params = pcs->frm_hdr.film_grain_params;
+                scs->fg_param_ring[slot].frame_number = pic_num;
+                scs->fg_param_ring[slot].ready = 1;
+            } else {
+                // Wait for the previous estimated frame's params to be ready
+                while (!scs->fg_param_ring[slot].ready || scs->fg_param_ring[slot].frame_number != prev) {
+                    svt_av1_sleep(1);
+                }
+                uint16_t saved_seed = pcs->frm_hdr.film_grain_params.random_seed;
+                pcs->frm_hdr.film_grain_params = scs->fg_param_ring[slot].params;
+                pcs->frm_hdr.film_grain_params.random_seed = saved_seed;
+            }
+        }
+    }
     return;
 }
 

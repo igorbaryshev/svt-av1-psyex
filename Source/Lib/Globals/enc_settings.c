@@ -788,6 +788,14 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet *scs) {
         return_error = EB_ErrorBadParameter;
     }
 
+    if (config->film_grain_estimation_interval > 50) {
+        SVT_ERROR(
+            "Instance %u: Film grain skip interval is only supported for values between "
+            "[0, 50]\n",
+            channel_number + 1);
+        return_error = EB_ErrorBadParameter;
+    }
+
     // Limit 8K & 16K support
     if ((uint64_t)(scs->max_input_luma_width * scs->max_input_luma_height) > INPUT_SIZE_4K_TH) {
         SVT_WARN(
@@ -1007,8 +1015,9 @@ EbErrorType svt_av1_set_default_params(EbSvtAv1EncConfiguration *config_ptr) {
     config_ptr->level   = 0;
 
     // Film grain denoising
-    config_ptr->film_grain_denoise_strength = 0;
-    config_ptr->film_grain_denoise_apply    = 0;
+    config_ptr->film_grain_denoise_strength    = 0;
+    config_ptr->film_grain_denoise_apply       = 0;
+    config_ptr->film_grain_estimation_interval = 1; // 1 = estimate every frame (default)
 
     // CPU Flags
     config_ptr->use_cpu_flags = EB_CPU_FLAGS_ALL;
@@ -1204,11 +1213,13 @@ void svt_av1_print_lib_params(SequenceControlSet *scs) {
         }
 
         if (config->film_grain_denoise_strength != 0) {
-            SVT_INFO("SVT [config]: film grain synth / denoising / level \t\t\t\t: %d / %d / %d\n",
+            SVT_INFO("SVT [config]: film grain synth / denoising / level / interval \t\t: %d / %d / %d / %d\n",
                      1,
                      config->film_grain_denoise_apply,
-                     config->film_grain_denoise_strength);
+                     config->film_grain_denoise_strength,
+                     config->film_grain_estimation_interval);
         }
+
         SVT_INFO("SVT [config]: sharpness / luminance-based QP bias \t\t\t\t: %d / %d\n",
                  config->sharpness,
                  config->luminance_qp_bias);
@@ -1236,12 +1247,11 @@ void svt_av1_print_lib_params(SequenceControlSet *scs) {
         }
         
         if (config->psy_rd > 0.0 && config->tune != 1) {
-            SVT_INFO("SVT [config]: PSY-RD Strength \t\t\t\t\t\t: %.2f\n",
-                    config->psy_rd);
+            SVT_INFO("SVT [config]: PSY-RD Strength / SPY-RD \t\t\t\t\t: %.2f / %s\n",
+                    config->psy_rd,
+                    // 1 is full spy-rd, 2 is partial spy-rd
+                    config->spy_rd == 1 ? "full" : (config->spy_rd == 2 ? "partial" : "off"));
         }
-        // 1 is full spy-rd, 2 is partial spy-rd
-        SVT_INFO("SVT [config]: spy-rd \t\t\t\t\t\t\t: %s\n",
-        config->spy_rd == 1 ? "full" : (config->spy_rd == 2 ? "partial" : "off"));
         
     }
 #ifdef DEBUG_BUFFERS
@@ -2059,6 +2069,7 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration *config_
         {"q", &config_struct->qp},
         {"qp", &config_struct->qp},
         {"film-grain", &config_struct->film_grain_denoise_strength},
+        {"film-grain-int", &config_struct->film_grain_estimation_interval},
         {"hierarchical-levels", &config_struct->hierarchical_levels},
         {"tier", &config_struct->tier},
         {"level", &config_struct->level},

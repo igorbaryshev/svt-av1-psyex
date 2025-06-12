@@ -4338,6 +4338,10 @@ static void copy_api_from_app(
     if (scs->static_config.film_grain_denoise_strength == 0 && scs->static_config.film_grain_denoise_apply == 1) {
         SVT_WARN("Film grain denoise apply signal is going to be ignored when film grain is off.\n");
     }
+    scs->static_config.film_grain_estimation_interval = ((EbSvtAv1EncConfiguration*)config_struct)->film_grain_estimation_interval;
+    if (scs->static_config.film_grain_denoise_strength == 0 && scs->static_config.film_grain_estimation_interval != 1) {
+        SVT_WARN("Film grain estimation interval has no effect when film grain is off.\n");
+    }
     scs->seq_header.film_grain_params_present = (uint8_t)(scs->static_config.film_grain_denoise_strength>0);
     scs->static_config.fgs_table = ((EbSvtAv1EncConfiguration*)config_struct)->fgs_table;
 

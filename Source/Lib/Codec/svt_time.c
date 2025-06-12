@@ -28,6 +28,16 @@
 
 #include "svt_time.h"
 
+void svt_av1_sleep(const unsigned milliseconds) {
+    if (!milliseconds)
+        return;
+#ifdef _WIN32
+    Sleep(milliseconds);
+#else
+    nanosleep(&(struct timespec){milliseconds / 1000, (milliseconds % 1000) * 1000000}, NULL);
+#endif
+}
+
 double svt_av1_compute_overall_elapsed_time_ms(const uint64_t start_seconds, const uint64_t start_useconds,
                                                const uint64_t finish_seconds, const uint64_t finish_useconds) {
     const int64_t s_diff = (int64_t)finish_seconds - (int64_t)start_seconds,

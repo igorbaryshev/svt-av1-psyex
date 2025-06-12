@@ -973,7 +973,7 @@ void process_output_stream_buffer(EncChannel *channel, EncApp *enc_app, int32_t 
             int dur_minutes         = (duration - dur_hours * 3600) / 60;
             int dur_seconds         =  duration - dur_hours * 3600 - dur_minutes * 60;
             const double pos_percent= (double)(*frame_count * 100) / app_cfg->frames_to_be_encoded;
-            const double speed      = fps * frame_rate_factor;
+            // const double speed      = fps * frame_rate_factor;
 
             switch (app_cfg->progress) {
             case 1:
@@ -1093,7 +1093,7 @@ void process_output_stream_buffer(EncChannel *channel, EncApp *enc_app, int32_t 
                     } */
 
                     fprintf(stderr,
-                            "\r\[%4.1f%%] \x1b[33m%*d/%d Frames\x1b[0m @ \x1b[32m%*.2f\x1b[0m fp%c \x1b[35m%.2fx\x1b[0m | \x1b[32m%*d kb/s\x1b[0m | \x1b[34m%d:%02d:%02d/%d:%02d:%02d\x1b[0m | %d:%02d:%02d [\x1b[36m-%d:%02d:%02d\x1b[0m] %s MB [\x1b[31m%s MB\x1b[0m] ",
+                            "\r\[%4.1f%%] %*d/%d Frames @ %*.2f fp%c | %*d kbps | %d:%02d:%02d/%d:%02d:%02d | %s MiB [%s MiB] | %d:%02d:%02d [-%d:%02d:%02d] ",
                             pos_percent,
                             frame_count_max_digits, *frame_count,
                             (int)app_cfg->frames_to_be_encoded,
@@ -1101,15 +1101,15 @@ void process_output_stream_buffer(EncChannel *channel, EncApp *enc_app, int32_t 
                             fps_max_digits,
                             fps >= 1.0 ? fps : fps * 60,
                             fps >= 1.0 ? 's' : 'm',
-                            speed,
+                            // speed,
                             bitrate_max_digits, bitrate,
                             pos_hours, pos_minutes, pos_seconds,
                             dur_hours, dur_minutes, dur_seconds,
-                            ete_hours, ete_minutes, ete_seconds,
-                            eta_hours, eta_minutes, eta_seconds,
                             // size_max_digits, size,
                             size_str,
-                            estsz_str);
+                            estsz_str,
+                            ete_hours, ete_minutes, ete_seconds,
+                            eta_hours, eta_minutes, eta_seconds);
 #else
                     fprintf(stderr,
                             "\rEncoding: \x1b[33m%4d/%d Frames\x1b[0m @ \x1b[32m%.2f\x1b[0m fp%c | \x1b[35m%.2f kb/s\x1b[0m | Time: \x1b[36m%d:%02d:%02d\x1b[0m \x1b[38;5;248m[-%d:%02d:%02d]\x1b[0m | Size: \x1b[31m%.2f MiB\x1b[0m \x1b[38;5;248m[%.2f MiB]\x1b[0m",
