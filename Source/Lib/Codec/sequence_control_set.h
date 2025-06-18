@@ -49,7 +49,7 @@ typedef struct List0OnlyBase {
 
 typedef struct {
     AomFilmGrain params;
-    volatile int ready;
+    volatile bool ready;
     uint64_t frame_number;
 } FilmGrainParamSlot;
 
@@ -121,6 +121,11 @@ typedef struct SequenceControlSet {
     uint16_t film_grain_random_seed;
     /*!< Film grain ring buffer */
     FilmGrainParamSlot fg_param_ring[FG_PARAM_RING_SIZE];
+    bool last_fg_params_ready; // first frame film grain parameters ready
+    AomFilmGrain last_fg_params; // first frame film grain parameters
+    FilmGrainParamSlot startup_fg_param_ring[FG_PARAM_RING_SIZE];
+    bool startup_fg_params_ready; // first frame of startup film grain frames ready
+    AomFilmGrain startup_fg_params; // first frame of startup film grain parameters
     /*!< over_boundary_block: pad resolution to a multiple of SB for smaller overhead
         (The signal changes per preset; 0: No over boundary blk allowed, 1: over boundary blk allowed) Default is 1.
         to enable when md_skip_blk is on */

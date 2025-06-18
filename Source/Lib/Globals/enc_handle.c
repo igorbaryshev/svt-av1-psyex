@@ -362,6 +362,19 @@ typedef enum ParallelLevel {
 #define PARALLEL_LEVEL_5_RANGE 23
 #define PARALLEL_LEVEL_6_RANGE 47
 
+//return picture analysis units count based on film grain estimation interval when film grain is enabled
+static uint8_t get_film_grain_pa_processes(uint8_t high, uint8_t low, EbSvtAv1EncConfiguration *config) {
+    const uint32_t fg_est_int = config->film_grain_estimation_interval;
+    switch(fg_est_int) {
+    case 0:
+        return low + 1;
+    case 1:
+        return high;
+    default:
+        return (high + low *(fg_est_int - 1)) / fg_est_int + 1;
+    }
+}
+
 //return max wavefronts in a given picture
 static uint32_t get_max_wavefronts(uint32_t width, uint32_t height, uint32_t blk_size) {
     assert(width > 0 && height > 0);
@@ -725,7 +738,7 @@ static EbErrorType load_default_buffer_configuration_settings(
         scs->total_process_init_count += (scs->rest_process_init_count = 1);
     }
     else if (lp <= PARALLEL_LEVEL_2) {
-        const uint8_t pa_processes = scs->static_config.film_grain_denoise_strength ? 16 : 1;
+        const uint8_t pa_processes = scs->static_config.film_grain_denoise_strength ? get_film_grain_pa_processes(16, 1, &scs->static_config) : 1;
         scs->total_process_init_count += (scs->source_based_operations_process_init_count = 1);
         scs->total_process_init_count += (scs->picture_analysis_process_init_count = clamp(pa_processes, 1, max_pa_proc));
         scs->total_process_init_count += (scs->motion_estimation_process_init_count = clamp(20, 1, max_me_proc));
@@ -738,7 +751,7 @@ static EbErrorType load_default_buffer_configuration_settings(
         scs->total_process_init_count += (scs->rest_process_init_count = clamp(1, 1, max_rest_proc));
     }
     else if (lp <= PARALLEL_LEVEL_3) {
-        const uint8_t pa_processes = scs->static_config.film_grain_denoise_strength ? 16 : 1;
+        const uint8_t pa_processes = scs->static_config.film_grain_denoise_strength ? get_film_grain_pa_processes(16, 1, &scs->static_config) : 1;
         scs->total_process_init_count += (scs->source_based_operations_process_init_count = 1);
         scs->total_process_init_count += (scs->picture_analysis_process_init_count = clamp(pa_processes, 1, max_pa_proc));
         scs->total_process_init_count += (scs->motion_estimation_process_init_count = clamp(25, 1, max_me_proc));
@@ -751,7 +764,7 @@ static EbErrorType load_default_buffer_configuration_settings(
         scs->total_process_init_count += (scs->rest_process_init_count = clamp(2, 1, max_rest_proc));
     }
     else if (lp <= PARALLEL_LEVEL_5 || scs->input_resolution <= INPUT_SIZE_1080p_RANGE) {
-        uint8_t pa_processes = scs->static_config.film_grain_denoise_strength ? 20 : 4;
+        uint8_t pa_processes = scs->static_config.film_grain_denoise_strength ? get_film_grain_pa_processes(16, 4, &scs->static_config) : 4;
         if (scs->static_config.pass == ENC_FIRST_PASS) {
             pa_processes = lp <= PARALLEL_LEVEL_5 ? 12 : 20;
         }
@@ -767,7 +780,9 @@ static EbErrorType load_default_buffer_configuration_settings(
         scs->total_process_init_count += (scs->rest_process_init_count = clamp(4, 1, max_rest_proc));
     }
     else {
-        const uint8_t pa_processes = (scs->static_config.pass == ENC_FIRST_PASS || scs->static_config.film_grain_denoise_strength) ? 20 : 16;
+        const uint8_t pa_processes = (scs->static_config.pass == ENC_FIRST_PASS || scs->static_config.film_grain_denoise_strength)
+                                         ? get_film_grain_pa_processes(20, 16, &scs->static_config)
+                                         : 16;
         scs->total_process_init_count += (scs->source_based_operations_process_init_count = 1);
         scs->total_process_init_count += (scs->picture_analysis_process_init_count = clamp(pa_processes, 1, max_pa_proc));
         scs->total_process_init_count += (scs->motion_estimation_process_init_count = clamp(25, 1, max_me_proc));
@@ -784,6 +799,7 @@ static EbErrorType load_default_buffer_configuration_settings(
     if (scs->static_config.pass == 0 || scs->static_config.pass == 2) {
         SVT_INFO("Level of Parallelism: %u\n", lp);
         SVT_INFO("Number of PPCS %u\n", scs->picture_control_set_pool_init_count);
+        SVT_INFO("Number of PA processes %u\n", scs->picture_analysis_process_init_count);
 
         /******************************************************************
         * Platform detection, limit cpu flags to hardware available CPU
@@ -4340,9 +4356,16 @@ static void copy_api_from_app(
     }
     scs->static_config.film_grain_estimation_interval = ((EbSvtAv1EncConfiguration*)config_struct)->film_grain_estimation_interval;
     if (scs->static_config.film_grain_denoise_strength == 0 && scs->static_config.film_grain_estimation_interval != 1) {
+        scs->static_config.film_grain_estimation_interval = 1;
         SVT_WARN("Film grain estimation interval has no effect when film grain is off.\n");
     }
     scs->seq_header.film_grain_params_present = (uint8_t)(scs->static_config.film_grain_denoise_strength>0);
+    if (scs->seq_header.film_grain_params_present && scs->static_config.film_grain_denoise_apply == 1 && scs->static_config.film_grain_estimation_interval != 1) {
+        SVT_WARN("Film grain denoise won't work as intended when film grain estimation interval is greater than 1.\n");
+    }
+    scs->static_config.startup_film_grain_length = ((EbSvtAv1EncConfiguration*)config_struct)->startup_film_grain_length;
+    scs->static_config.multiply_startup_fg_length = config_struct->multiply_startup_fg_length;
+    scs->static_config.startup_film_grain_interval = ((EbSvtAv1EncConfiguration*)config_struct)->startup_film_grain_interval;
     scs->static_config.fgs_table = ((EbSvtAv1EncConfiguration*)config_struct)->fgs_table;
 
     // MD Parameters
@@ -4507,6 +4530,12 @@ static void copy_api_from_app(
             scs->static_config.frame_rate_denominator;
         scs->static_config.intra_period_length =
             (int32_t)(fps * scs->static_config.intra_period_length);
+    }
+    if (scs->static_config.multiply_startup_fg_length) {
+        const double fps = (double)scs->static_config.frame_rate_numerator /
+            scs->static_config.frame_rate_denominator;
+        scs->static_config.startup_film_grain_length =
+            (uint32_t)((fps * scs->static_config.startup_film_grain_length) + 0.5);
     }
     if (scs->static_config.look_ahead_distance == (uint32_t)~0)
         scs->static_config.look_ahead_distance = compute_default_look_ahead(&scs->static_config);

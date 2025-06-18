@@ -788,10 +788,10 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet *scs) {
         return_error = EB_ErrorBadParameter;
     }
 
-    if (config->film_grain_estimation_interval > 50) {
+    if (config->film_grain_estimation_interval > 50 || config->startup_film_grain_interval > 50) {
         SVT_ERROR(
-            "Instance %u: Film grain skip interval is only supported for values between "
-            "[0, 50]\n",
+            "Instance %u: Film grain estimation interval is only supported for values between "
+            "[0,50]\n",
             channel_number + 1);
         return_error = EB_ErrorBadParameter;
     }
@@ -1018,6 +1018,9 @@ EbErrorType svt_av1_set_default_params(EbSvtAv1EncConfiguration *config_ptr) {
     config_ptr->film_grain_denoise_strength    = 0;
     config_ptr->film_grain_denoise_apply       = 0;
     config_ptr->film_grain_estimation_interval = 1; // 1 = estimate every frame (default)
+    config_ptr->startup_film_grain_length      = 0; // 0 = don't specify startup film grain estimation length
+    config_ptr->startup_film_grain_interval    = 2;
+    config_ptr->multiply_startup_fg_length     = false;
 
     // CPU Flags
     config_ptr->use_cpu_flags = EB_CPU_FLAGS_ALL;
@@ -1219,6 +1222,12 @@ void svt_av1_print_lib_params(SequenceControlSet *scs) {
                      config->film_grain_denoise_strength,
                      config->film_grain_estimation_interval);
         }
+        if (config->startup_film_grain_length > 0) {
+            SVT_INFO("SVT [config]: startup film grain length / interval \t\t\t\t: %d / %d\n",
+                config->startup_film_grain_length,
+                config->startup_film_grain_interval);
+        }
+
 
         SVT_INFO("SVT [config]: sharpness / luminance-based QP bias \t\t\t\t: %d / %d\n",
                  config->sharpness,
@@ -1583,6 +1592,32 @@ static EbErrorType str_to_bitrate(const char *nptr, uint32_t *out) {
     if (*out > 100000000) {
         *out = 100000000;
         SVT_WARN("Bitrate value: %s has been set to 100000000\n", nptr);
+    }
+    return EB_ErrorNone;
+}
+
+static EbErrorType str_to_startup_fg_len(const char *nptr, uint32_t *out, bool *multi) {
+    char *suff;
+    const u_long fg_len = strtoul(nptr, &suff, 0);
+
+    if (fg_len > UINT32_MAX) {
+        return EB_ErrorBadParameter;
+    }
+
+    switch (*suff) {
+    case 's':
+        // signal  we need to multiply startup film grain length by frame_rate
+        *multi = true;
+        *out   = fg_len;
+        break;
+    case '\0':
+        *multi = false;
+        *out   = fg_len;
+        break;
+    default:
+        // else leave as untouched, we have an invalid value
+        SVT_ERROR("Invalid startup film grain length value: %s\n", nptr);
+        return EB_ErrorBadParameter;
     }
     return EB_ErrorNone;
 }
@@ -1997,6 +2032,9 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration *config_
     if (!strcmp(name, "mbr"))
         return str_to_bitrate(value, &config_struct->max_bit_rate);
 
+    if (!strcmp(name, "startup-fg-length"))
+        return str_to_startup_fg_len(value, &config_struct->startup_film_grain_length, &config_struct->multiply_startup_fg_length);
+
     // options updating more than one field
     if (!strcmp(name, "crf"))
         return str_to_crf(value, config_struct);
@@ -2070,6 +2108,7 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration *config_
         {"qp", &config_struct->qp},
         {"film-grain", &config_struct->film_grain_denoise_strength},
         {"film-grain-int", &config_struct->film_grain_estimation_interval},
+        {"startup-fg-int", &config_struct->startup_film_grain_interval},
         {"hierarchical-levels", &config_struct->hierarchical_levels},
         {"tier", &config_struct->tier},
         {"level", &config_struct->level},

@@ -99,6 +99,20 @@ EbErrorType svt_sequence_control_set_ctor(SequenceControlSet *scs, EbPtr object_
     scs->seq_header.order_hint_info.enable_order_hint    = 1;
     scs->seq_header.order_hint_info.order_hint_bits      = 7;
 
+    // initialize frame estimation interval related variables
+    for (int i = 0; i < FG_PARAM_RING_SIZE; ++i) {
+        scs->fg_param_ring[i].ready = false;
+        scs->fg_param_ring[i].frame_number = (uint64_t)-1;
+        memset(&scs->fg_param_ring[i].params, 0, sizeof(AomFilmGrain));
+        scs->startup_fg_param_ring[i].ready = false;
+        scs->startup_fg_param_ring[i].frame_number = (uint64_t)-1;
+        memset(&scs->startup_fg_param_ring[i].params, 0, sizeof(AomFilmGrain));
+    }
+    scs->last_fg_params_ready = false;
+    memset(&scs->last_fg_params, 0, sizeof(AomFilmGrain));
+    scs->startup_fg_params_ready = false;
+    memset(&scs->startup_fg_params, 0, sizeof(AomFilmGrain));
+
     return EB_ErrorNone;
 }
 EbErrorType svt_aom_scs_set_creator(EbPtr *object_dbl_ptr, EbPtr object_init_data_ptr) {

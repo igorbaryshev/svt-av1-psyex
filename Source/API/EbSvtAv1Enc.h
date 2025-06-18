@@ -581,6 +581,7 @@ typedef struct EbSvtAv1EncConfiguration {
 
     /**
      * @brief Strength of film grain and denoising.
+     *
      * 0: film grain and denoising off (default in SVT-AV1-PSY)
      * >0: film grain enabled, value determines strength.
      *
@@ -589,6 +590,7 @@ typedef struct EbSvtAv1EncConfiguration {
 
     /**
      * @brief Flag to enable denoising.
+     *
      * Only applicable when film grain is ON.
      * 0: denoising off (default)
      * 1: denoising on
@@ -598,13 +600,44 @@ typedef struct EbSvtAv1EncConfiguration {
 
     /**
      * @brief Film grain estimation interval.
-     * 
-     *  0: Estimate only for first frame, reuse for all others.
-     *  1: Estimate every frame.
-     *  2-50: Estimate every N-th frame.
-     * 
-     * Default is 1. */
+     *
+     * This parameter controls how often the film grain estimation is performed.
+     * 0: Estimate only once (at the first frame).
+     * 1: Estimate every frame (default).
+     * 2-50: Estimate every N-th frame.
+     *
+     * Default is 1.
+     */
     uint32_t film_grain_estimation_interval;
+
+    /**
+     * @brief Film grain estimation startup length.
+     *
+     * This parameter controls how many frames are used to estimate the film grain
+     * at the beginning of the video with a startup interval.
+     *
+     * Default is 0.
+     */
+    uint32_t startup_film_grain_length;
+
+    /**
+     * @brief Film grain estimation startup interval.
+     *
+     * This parameter controls how often the film grain estimation is performed
+     * at the beginning of the video.
+     * 0: estimate only once (at the first frame).
+     * 1: Estimate every frame.
+     * 2-50: Estimate every N-th frame.
+     *
+     * Default is 2.
+     */
+    uint32_t startup_film_grain_interval;
+
+    /**
+     * @brief @brief Signal to the library to treat film_grain_startup_length as seconds and
+     * multiply by fps_num/fps_den.
+     */
+    bool multiply_startup_fg_length;
 
     /* CDEF Level
     *

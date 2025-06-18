@@ -91,6 +91,8 @@
 #define FILM_GRAIN_TOKEN "--film-grain"
 #define FILM_GRAIN_DENOISE_APPLY_TOKEN "--film-grain-denoise"
 #define FILM_GRAIN_INT_TOKEN "--film-grain-int"
+#define STARTUP_FG_LENGTH_TOKEN "--startup-fg-length"
+#define STARTUP_FG_INT_TOKEN "--startup-fg-int"
 #define INTRA_REFRESH_TYPE_TOKEN "--irefresh-type" // no Eval
 #define CDEF_ENABLE_TOKEN "--enable-cdef"
 #define SCREEN_CONTENT_TOKEN "--scm"
@@ -1136,7 +1138,18 @@ ConfigEntry config_entry_specific[] = {
 
     {SINGLE_INPUT,
      FILM_GRAIN_INT_TOKEN,
-     "Film grain parameter estimation frequency, default is 1 [0: first frame only, 1-50: every N-th frame]",
+     "Film grain parameter estimation interval, default is 1 [0: infinite, 1: every frame, 2-50: every N-th frame]",
+     set_cfg_generic_token},
+
+    {SINGLE_INPUT,
+     STARTUP_FG_LENGTH_TOKEN,
+     "Film grain estimation startup frames, default is 0 [0: no startup, > 0: estimate first N frames with --startup-fg-int]",
+     set_cfg_generic_token},
+
+    {SINGLE_INPUT,
+     STARTUP_FG_INT_TOKEN,
+     "Specify another film grain estimation startup interval for first --startup-fg-length frames, if specified, default "
+     "is 2 [0: infinite, 1-50: every N-th frame]",
      set_cfg_generic_token},
 
     {SINGLE_INPUT, FGS_TABLE_TOKEN, "Set the film grain model table path", set_cfg_fgs_table_path},
@@ -1417,6 +1430,8 @@ ConfigEntry config_entry[] = {
     {SINGLE_INPUT, FILM_GRAIN_TOKEN, "FilmGrain", set_cfg_generic_token},
     {SINGLE_INPUT, FILM_GRAIN_DENOISE_APPLY_TOKEN, "FilmGrainDenoise", set_cfg_generic_token},
     {SINGLE_INPUT, FILM_GRAIN_INT_TOKEN, "FilmGrainInt", set_cfg_generic_token},
+    {SINGLE_INPUT, STARTUP_FG_LENGTH_TOKEN, "StartupFilmGrainLength", set_cfg_generic_token},
+    {SINGLE_INPUT, STARTUP_FG_INT_TOKEN, "StartupFilmGrainInt", set_cfg_generic_token},
     {SINGLE_INPUT, FGS_TABLE_TOKEN, "FilmGrainTable", set_cfg_fgs_table_path},
 
     //   Super-resolution support
