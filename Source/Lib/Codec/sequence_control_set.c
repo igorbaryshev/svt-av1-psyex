@@ -101,10 +101,8 @@ EbErrorType svt_sequence_control_set_ctor(SequenceControlSet *scs, EbPtr object_
 
     // initialize frame estimation interval related variables
     for (int i = 0; i < FG_PARAM_RING_SIZE; ++i) {
-        scs->fg_param_ring[i].ready = false;
         scs->fg_param_ring[i].frame_number = (uint64_t)-1;
         memset(&scs->fg_param_ring[i].params, 0, sizeof(AomFilmGrain));
-        scs->startup_fg_param_ring[i].ready = false;
         scs->startup_fg_param_ring[i].frame_number = (uint64_t)-1;
         memset(&scs->startup_fg_param_ring[i].params, 0, sizeof(AomFilmGrain));
     }

@@ -90,9 +90,12 @@
 #define LEVEL_TOKEN "--level"
 #define FILM_GRAIN_TOKEN "--film-grain"
 #define FILM_GRAIN_DENOISE_APPLY_TOKEN "--film-grain-denoise"
+#define FILM_GRAIN_CROP_TOKEN "--film-grain-crop"
 #define FILM_GRAIN_INT_TOKEN "--film-grain-int"
 #define STARTUP_FG_LENGTH_TOKEN "--startup-fg-length"
 #define STARTUP_FG_INT_TOKEN "--startup-fg-int"
+#define PHOTON_NOISE_TOKEN "--photon-noise"
+#define PHOTON_NOISE_CHROMA_TOKEN "--photon-noise-chroma"
 #define INTRA_REFRESH_TYPE_TOKEN "--irefresh-type" // no Eval
 #define CDEF_ENABLE_TOKEN "--enable-cdef"
 #define SCREEN_CONTENT_TOKEN "--scm"
@@ -1137,6 +1140,11 @@ ConfigEntry config_entry_specific[] = {
      set_cfg_generic_token},
 
     {SINGLE_INPUT,
+     FILM_GRAIN_CROP_TOKEN,
+     "Set film grain estimation crop area in format width:height[:offset_x:offset_y], default is 100:100:0:0 [0-100:0-100:0-100:0-100]",
+     set_cfg_generic_token},
+    
+    {SINGLE_INPUT,
      FILM_GRAIN_INT_TOKEN,
      "Film grain parameter estimation interval, default is 1 [0: infinite, 1: every frame, 2-50: every N-th frame]",
      set_cfg_generic_token},
@@ -1150,6 +1158,16 @@ ConfigEntry config_entry_specific[] = {
      STARTUP_FG_INT_TOKEN,
      "Specify another film grain estimation startup interval for first --startup-fg-length frames, if specified, default "
      "is 2 [0: infinite, 1-50: every N-th frame]",
+     set_cfg_generic_token},
+
+    {SINGLE_INPUT,
+     PHOTON_NOISE_TOKEN,
+     "Generate photon noise table for film grain, default is 0 [0: off, 1-50: predefined ISO values, >50: literal ISO values]",
+     set_cfg_generic_token},
+
+    {SINGLE_INPUT,
+     PHOTON_NOISE_CHROMA_TOKEN,
+    "Enable chroma noise, default is 0 [0: off, 1: on]",
      set_cfg_generic_token},
 
     {SINGLE_INPUT, FGS_TABLE_TOKEN, "Set the film grain model table path", set_cfg_fgs_table_path},
@@ -1429,9 +1447,12 @@ ConfigEntry config_entry[] = {
     {SINGLE_INPUT, SCREEN_CONTENT_TOKEN, "ScreenContentMode", set_cfg_generic_token},
     {SINGLE_INPUT, FILM_GRAIN_TOKEN, "FilmGrain", set_cfg_generic_token},
     {SINGLE_INPUT, FILM_GRAIN_DENOISE_APPLY_TOKEN, "FilmGrainDenoise", set_cfg_generic_token},
+    {SINGLE_INPUT, FILM_GRAIN_CROP_TOKEN, "FilmGrainCrop", set_cfg_generic_token},
     {SINGLE_INPUT, FILM_GRAIN_INT_TOKEN, "FilmGrainInt", set_cfg_generic_token},
     {SINGLE_INPUT, STARTUP_FG_LENGTH_TOKEN, "StartupFilmGrainLength", set_cfg_generic_token},
     {SINGLE_INPUT, STARTUP_FG_INT_TOKEN, "StartupFilmGrainInt", set_cfg_generic_token},
+    {SINGLE_INPUT, PHOTON_NOISE_TOKEN, "PhotonNoise", set_cfg_generic_token},
+    {SINGLE_INPUT, PHOTON_NOISE_CHROMA_TOKEN, "PhotonNoiseChroma", set_cfg_generic_token},
     {SINGLE_INPUT, FGS_TABLE_TOKEN, "FilmGrainTable", set_cfg_fgs_table_path},
 
     //   Super-resolution support

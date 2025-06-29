@@ -2276,8 +2276,13 @@ static void unpack_2d_pic(uint8_t *packed[3], EbPictureBufferDesc *outputPicture
                               chroma_height);
 }
 
+
+typedef struct {
+    uint16_t x, y, w, h;
+} CropWindow;
+
 int32_t svt_aom_denoise_and_model_run(struct AomDenoiseAndModel *ctx, EbPictureBufferDesc *sd, AomFilmGrain *film_grain,
-                                      int32_t use_highbd) {
+                                      int32_t use_highbd, struct AomFilmGrainCrop *fg_crop_cfg) {
     const int32_t block_size = ctx->block_size;
     uint8_t      *raw_data[3];
     int32_t       chroma_sub_log2[2] = {1, 1}; //todo: send chroma subsampling
@@ -2302,15 +2307,61 @@ int32_t svt_aom_denoise_and_model_run(struct AomDenoiseAndModel *ctx, EbPictureB
         raw_data[2] = (uint8_t *)(ctx->packed[2]);
     }
 
-    const uint8_t *const data[3] = {raw_data[0], raw_data[1], raw_data[2]};
+    // Local crop window (x,y,w,h) in pixels
+    CropWindow crop = {0, 0, sd->width, sd->height};
+
+    if (fg_crop_cfg && fg_crop_cfg->enabled) {
+        const uint16_t fw = sd->width;
+        const uint16_t fh = sd->height;
+
+        // 1) Align sizes down to block grid
+        crop.w = ALIGN_DOWN((uint16_t)((fw * fg_crop_cfg->width_percent  + 0.5) / 100.0), block_size);
+        crop.h = ALIGN_DOWN((uint16_t)((fh * fg_crop_cfg->height_percent + 0.5) / 100.0), block_size);
+
+        // 2) Compute raw offsets
+        crop.x = (uint16_t)((fw * fg_crop_cfg->crop_offset_x_percent + 0.5) / 100.0);
+        crop.y = (uint16_t)((fh * fg_crop_cfg->crop_offset_y_percent + 0.5) / 100.0);
+
+        // 3) Align offsets down to same luma block grid
+        crop.x = ALIGN_DOWN(crop.x, block_size);
+        crop.y = ALIGN_DOWN(crop.y, block_size);
+
+        // 4) Also align to chroma sampling grid
+        crop.x = ALIGN_DOWN(crop.x, 1 << chroma_sub_log2[1]);
+        crop.y = ALIGN_DOWN(crop.y, 1 << chroma_sub_log2[0]);
+
+        // 5) Clamp so window stays in-frame
+        if (crop.x + crop.w > fw) crop.x = fw - crop.w;
+        if (crop.y + crop.h > fh) crop.y = fh - crop.h;
+
+        // 6) Nanny: ensure at least one block if percent > 0
+        if (fg_crop_cfg->width_percent  > 0 && crop.w < (uint16_t)block_size) {
+            crop.w = block_size;
+            if (crop.x + crop.w > fw)
+                crop.x = fw > (uint16_t)block_size ? fw - block_size : 0;
+        }
+        if (fg_crop_cfg->height_percent > 0 && crop.h < (uint16_t)block_size) {
+            crop.h = block_size;
+            if (crop.y + crop.h > fh)
+                crop.y = fh > (uint16_t)block_size ? fh - block_size : 0;
+        }
+    }
+
+    // Adjust data pointers into the cropped region
+    uint8_t *cropped_y  = raw_data[0] + crop.y * strides[0] + crop.x;
+    uint8_t *cropped_cb = raw_data[1] + (crop.y >> chroma_sub_log2[0]) * strides[1] + (crop.x >> chroma_sub_log2[1]);
+    uint8_t *cropped_cr = raw_data[2] + (crop.y >> chroma_sub_log2[0]) * strides[2] + (crop.x >> chroma_sub_log2[1]);
+
+    // const uint8_t *const data[3] = {raw_data[0], raw_data[1], raw_data[2]};
+    const uint8_t *const cropped_data[3] = {cropped_y, cropped_cb, cropped_cr};
 
     svt_aom_flat_block_finder_run(
-        &ctx->flat_block_finder, data[0], sd->width, sd->height, strides[0], ctx->flat_blocks);
+        &ctx->flat_block_finder, cropped_y, crop.w, crop.h, strides[0], ctx->flat_blocks);
 
-    if (!svt_aom_wiener_denoise_2d(data,
+    if (!svt_aom_wiener_denoise_2d(cropped_data,
                                    ctx->denoised,
-                                   sd->width,
-                                   sd->height,
+                                   crop.w,
+                                   crop.h,
                                    strides,
                                    chroma_sub_log2,
                                    ctx->noise_psd,
@@ -2322,10 +2373,10 @@ int32_t svt_aom_denoise_and_model_run(struct AomDenoiseAndModel *ctx, EbPictureB
     }
 
     const AomNoiseStatus status = svt_aom_noise_model_update(&ctx->noise_model,
-                                                             data,
+                                                             cropped_data,
                                                              (const uint8_t *const *)ctx->denoised,
-                                                             sd->width,
-                                                             sd->height,
+                                                             crop.w,
+                                                             crop.h,
                                                              strides,
                                                              chroma_sub_log2,
                                                              ctx->flat_blocks,

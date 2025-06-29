@@ -599,6 +599,11 @@ typedef struct EbSvtAv1EncConfiguration {
     uint8_t film_grain_denoise_apply;
 
     /**
+     * @brief Stores film grain cropping area parameters.
+     */
+    AomFilmGrainCrop film_grain_crop;
+
+    /**
      * @brief Film grain estimation interval.
      *
      * This parameter controls how often the film grain estimation is performed.
@@ -634,10 +639,38 @@ typedef struct EbSvtAv1EncConfiguration {
     uint32_t startup_film_grain_interval;
 
     /**
-     * @brief @brief Signal to the library to treat film_grain_startup_length as seconds and
+     * @brief Signal to the library to treat film_grain_startup_length as seconds and
      * multiply by fps_num/fps_den.
      */
     bool multiply_startup_fg_length;
+
+    /**
+     * @brief Generate film grain synthesis table
+     *
+     * 0: disable
+     * 1-50: enabled, predefined ISO values roughly corresponding to film grain strength levels.
+     * >51: literal ISO values
+     * 
+     * Default is 0.
+    */
+    uint32_t photon_noise_level;
+
+    /**
+     * @brief Photon noise ISO value
+     * 
+     * Default is 0.
+     */
+    uint32_t photon_noise_iso;
+
+    /**
+     * @brief Enable chroma noise, which will is scaled based on luma values for generated film grain table.
+     * 
+     * 0: disable chroma scaling
+     * 1: enable chroma scaling
+     * 
+     * Default is 0.
+     */
+    uint8_t enable_photon_noise_chroma;
 
     /* CDEF Level
     *

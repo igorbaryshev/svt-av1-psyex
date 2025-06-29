@@ -45,11 +45,10 @@ typedef struct List0OnlyBase {
 } List0OnlyBase;
 
 // Film grain parameter ring buffer for multi-threaded estimation reuse
-#define FG_PARAM_RING_SIZE 64
+#define FG_PARAM_RING_SIZE 128
 
 typedef struct {
     AomFilmGrain params;
-    volatile bool ready;
     uint64_t frame_number;
 } FilmGrainParamSlot;
 

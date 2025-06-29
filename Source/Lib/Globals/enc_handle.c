@@ -56,6 +56,7 @@
 #include "rc_results.h"
 #include "definitions.h"
 #include "metadata_handle.h"
+#include "photon_noise_table.h"
 
 #include "pack_unpack_c.h"
 #include "enc_mode_config.h"
@@ -361,19 +362,6 @@ typedef enum ParallelLevel {
 #define PARALLEL_LEVEL_4_RANGE 11
 #define PARALLEL_LEVEL_5_RANGE 23
 #define PARALLEL_LEVEL_6_RANGE 47
-
-//return picture analysis units count based on film grain estimation interval when film grain is enabled
-static uint8_t get_film_grain_pa_processes(uint8_t high, uint8_t low, EbSvtAv1EncConfiguration *config) {
-    const uint32_t fg_est_int = config->film_grain_estimation_interval;
-    switch(fg_est_int) {
-    case 0:
-        return low + 1;
-    case 1:
-        return high;
-    default:
-        return (high + low *(fg_est_int - 1)) / fg_est_int + 1;
-    }
-}
 
 //return max wavefronts in a given picture
 static uint32_t get_max_wavefronts(uint32_t width, uint32_t height, uint32_t blk_size) {
@@ -738,7 +726,7 @@ static EbErrorType load_default_buffer_configuration_settings(
         scs->total_process_init_count += (scs->rest_process_init_count = 1);
     }
     else if (lp <= PARALLEL_LEVEL_2) {
-        const uint8_t pa_processes = scs->static_config.film_grain_denoise_strength ? get_film_grain_pa_processes(16, 1, &scs->static_config) : 1;
+        const uint8_t pa_processes = scs->static_config.film_grain_denoise_strength ? 16 : 1;
         scs->total_process_init_count += (scs->source_based_operations_process_init_count = 1);
         scs->total_process_init_count += (scs->picture_analysis_process_init_count = clamp(pa_processes, 1, max_pa_proc));
         scs->total_process_init_count += (scs->motion_estimation_process_init_count = clamp(20, 1, max_me_proc));
@@ -751,7 +739,7 @@ static EbErrorType load_default_buffer_configuration_settings(
         scs->total_process_init_count += (scs->rest_process_init_count = clamp(1, 1, max_rest_proc));
     }
     else if (lp <= PARALLEL_LEVEL_3) {
-        const uint8_t pa_processes = scs->static_config.film_grain_denoise_strength ? get_film_grain_pa_processes(16, 1, &scs->static_config) : 1;
+        const uint8_t pa_processes = scs->static_config.film_grain_denoise_strength ? 16 : 1;
         scs->total_process_init_count += (scs->source_based_operations_process_init_count = 1);
         scs->total_process_init_count += (scs->picture_analysis_process_init_count = clamp(pa_processes, 1, max_pa_proc));
         scs->total_process_init_count += (scs->motion_estimation_process_init_count = clamp(25, 1, max_me_proc));
@@ -764,7 +752,7 @@ static EbErrorType load_default_buffer_configuration_settings(
         scs->total_process_init_count += (scs->rest_process_init_count = clamp(2, 1, max_rest_proc));
     }
     else if (lp <= PARALLEL_LEVEL_5 || scs->input_resolution <= INPUT_SIZE_1080p_RANGE) {
-        uint8_t pa_processes = scs->static_config.film_grain_denoise_strength ? get_film_grain_pa_processes(16, 4, &scs->static_config) : 4;
+        uint8_t pa_processes = scs->static_config.film_grain_denoise_strength ? 16 : 4;
         if (scs->static_config.pass == ENC_FIRST_PASS) {
             pa_processes = lp <= PARALLEL_LEVEL_5 ? 12 : 20;
         }
@@ -780,9 +768,7 @@ static EbErrorType load_default_buffer_configuration_settings(
         scs->total_process_init_count += (scs->rest_process_init_count = clamp(4, 1, max_rest_proc));
     }
     else {
-        const uint8_t pa_processes = (scs->static_config.pass == ENC_FIRST_PASS || scs->static_config.film_grain_denoise_strength)
-                                         ? get_film_grain_pa_processes(20, 16, &scs->static_config)
-                                         : 16;
+        const uint8_t pa_processes = (scs->static_config.pass == ENC_FIRST_PASS || scs->static_config.film_grain_denoise_strength) ? 20 : 16;
         scs->total_process_init_count += (scs->source_based_operations_process_init_count = 1);
         scs->total_process_init_count += (scs->picture_analysis_process_init_count = clamp(pa_processes, 1, max_pa_proc));
         scs->total_process_init_count += (scs->motion_estimation_process_init_count = clamp(25, 1, max_me_proc));
@@ -4028,6 +4014,27 @@ static void set_param_based_on_input(SequenceControlSet *scs)
         scs->static_config.hierarchical_levels = 4;
         SVT_WARN("Fwd key frame is only supported for hierarchical levels 4 at this point. Hierarchical levels are set to 4\n");
     }
+    if (scs->static_config.photon_noise_level > 0) {
+        // Check if film-grain-denoise is also enabled (should be disable if fgs_table is present)
+        if (scs->static_config.film_grain_denoise_strength > 0) {
+            // SVT_WARN("Both film-grain-denoise and photon-noise were specified; film-grain-denoise will be disabled\n");
+            scs->static_config.film_grain_denoise_strength = 0;
+        }
+        // Check if fgs_table is present
+        if (scs->static_config.fgs_table) {
+            SVT_WARN("Both photon-noise and fgs-table were specified; photon-noise will be disabled\n");
+            scs->static_config.photon_noise_level = 0;
+        } else {
+            if (scs->static_config.transfer_characteristics == EB_CICP_TC_UNSPECIFIED) {
+                SVT_WARN("Transfer characteristics is not specified, photon noise will be defaulting to BT.709\n");
+            }
+            svt_av1_generate_photon_noise_table(&scs->static_config);
+        }
+    } else {
+        if (scs->static_config.enable_photon_noise_chroma == 1) {
+            SVT_WARN("Photon noise chroma enable signal is going to be ignored when photon noise level is 0.\n");
+        }
+    }
     bool disallow_nsq = true;
     uint8_t nsq_geom_level;
     uint8_t allow_HVA_HVB = 0;
@@ -4354,6 +4361,11 @@ static void copy_api_from_app(
     if (scs->static_config.film_grain_denoise_strength == 0 && scs->static_config.film_grain_denoise_apply == 1) {
         SVT_WARN("Film grain denoise apply signal is going to be ignored when film grain is off.\n");
     }
+    scs->static_config.film_grain_crop = ((EbSvtAv1EncConfiguration*)config_struct)->film_grain_crop;
+    if (scs->static_config.film_grain_denoise_strength == 0 && scs->static_config.film_grain_crop.enabled) {
+        SVT_WARN("Film grain crop is going to be ignored when film grain is off.\n");
+        scs->static_config.film_grain_crop.enabled = false;
+    }
     scs->static_config.film_grain_estimation_interval = ((EbSvtAv1EncConfiguration*)config_struct)->film_grain_estimation_interval;
     if (scs->static_config.film_grain_denoise_strength == 0 && scs->static_config.film_grain_estimation_interval != 1) {
         scs->static_config.film_grain_estimation_interval = 1;
@@ -4367,6 +4379,8 @@ static void copy_api_from_app(
     scs->static_config.multiply_startup_fg_length = config_struct->multiply_startup_fg_length;
     scs->static_config.startup_film_grain_interval = ((EbSvtAv1EncConfiguration*)config_struct)->startup_film_grain_interval;
     scs->static_config.fgs_table = ((EbSvtAv1EncConfiguration*)config_struct)->fgs_table;
+    scs->static_config.photon_noise_level = ((EbSvtAv1EncConfiguration*)config_struct)->photon_noise_level;
+    scs->static_config.enable_photon_noise_chroma = ((EbSvtAv1EncConfiguration*)config_struct)->enable_photon_noise_chroma;
 
     // MD Parameters
     scs->enable_hbd_mode_decision = ((EbSvtAv1EncConfiguration*)config_struct)->encoder_bit_depth > 8 ? DEFAULT : 0;

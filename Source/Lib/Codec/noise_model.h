@@ -326,7 +326,7 @@ struct AomDenoiseAndModel;
      * \param[out]    grain  Output film grain parameters
      */
 int32_t svt_aom_denoise_and_model_run(struct AomDenoiseAndModel *ctx, EbPictureBufferDesc *sd, AomFilmGrain *film_grain,
-                                      int32_t use_highbd);
+                                      int32_t use_highbd, struct AomFilmGrainCrop *fg_crop_cfg);
 
 /*!\brief Allocates a context that can be used for denoising and noise modeling.
      *
